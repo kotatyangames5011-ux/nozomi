@@ -156,6 +156,13 @@ channel.addEventListener('message', e => {
         keys.space = true;
         setTimeout(() => keys.space = false, 50);
     }
+
+    // 開始
+    if (data.type === 'start') {
+        if (!gameStarted && !gameOver) {
+            startGame();
+        }
+    }
 });
 
 
@@ -408,3 +415,4 @@ devWindow.addEventListener('transitionend', ()=>{ if(devMode) devInput.focus(); 
 </script>
 </body>
 </html>
+
