@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>SF Control HUD</title>
+
+<style>
+html, body {
+  margin: 0;
+  background: #050b1a;
+  overflow: hidden;
+  font-family: system-ui;
+}
+
+/* ===== HUD ===== */
+.hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  color: #0af;
+}
+
+.hud.firing {
+  animation: firePulse 0.6s ease-in-out infinite;
+  filter: drop-shadow(0 0 12px #f33);
+}
+
+@keyframes firePulse {
+  0%   { filter: drop-shadow(0 0 6px #f33); }
+  50%  { filter: drop-shadow(0 0 16px #f66); }
+  100% { filter: drop-shadow(0 0 6px #f33); }
+}
+
+/* ===== グリッド ===== */
+.grid {
+  position: absolute;
+  inset: 20%;
+  border: 1px solid #0af;
+  background:
+    linear-gradient(#0af22 1px, transparent 1px),
+    linear-gradient(90deg, #0af22 1px, transparent 1px);
+  background-size: 30px 30px;
+  transform: perspective(600px) rotateX(60deg);
+  transition: transform 0.2s ease-out;
+}
+
+/* ===== 円HUD ===== */
+.circle {
+  position: absolute;
+  width: 160px;
+  height: 160px;
+  border: 2px solid #0af;
+  border-radius: 50%;
+  animation: spin 20s linear infinite;
+}
+
+.circle.small {
+  width: 100px;
+  height: 100px;
+  border-color: #f0f;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ===== メーター ===== */
+.meter {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+}
+
+.meter svg {
+  transform: rotate(-90deg);
+}
+
+.meter .fg {
+  stroke: #0af;
+  stroke-width: 2;
+  fill: none;
+  stroke-dasharray: 283;
+  filter: drop-shadow(0 0 6px #0af);
+}
+
+/* ===== 操作パネル ===== */
+.panel {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+button {
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
+/* FIRE（内側寄せ） */
+#fireBtn {
+  position: absolute;
+  left: 140px;
+  bottom: 80px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  border: none;
+  font-size: 24px;
+  background: #e33;
+  color: #fff;
+  cursor: pointer;
+}
+
+/* 移動（内側寄せ） */
+.controls {
+  position: absolute;
+  right: 140px;
+  bottom: 80px;
+  display: flex;
+  gap: 24px;
+}
+
+.control-btn {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  font-size: 44px;
+  border: none;
+  background: #222;
+  color: #0af;
+  cursor: pointer;
+}
+
+/* START（画面中央） */
+#startBtn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 260px;
+  height: 90px;
+  font-size: 30px;
+  border-radius: 16px;
+  border: 2px solid #0af;
+  background: #081a33;
+  color: #0af;
+  letter-spacing: 6px;
+  cursor: pointer;
+  box-shadow: 0 0 28px #0af66;
+}
+
+#startBtn:active {
+  transform: translate(-50%, -50%) scale(0.95);
+}
+
+#fireBtn:active,
+.control-btn:active {
+  transform: scale(0.95);
+}
+
+/* ===== START フェードアウト ===== */
+#startBtn.fade-out {
+  animation: fadeOut 0.6s ease forwards;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ===== HUD ===== -->
+<div class="hud" id="hud">
+  <div class="circle" style="top:40px; left:240px;"></div>
+  <div class="circle small" style="top:60px; right:80px;"></div>
+
+  <div class="grid" id="grid"></div>
+
+  <!-- メーター左 -->
+  <div class="meter" style="bottom:240px; left:60px;">
+    <svg viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="45" stroke="#033" fill="none"/>
+      <circle class="fg" cx="50" cy="50" r="45"/>
+    </svg>
+  </div>
+
+  <!-- メーター右 -->
+  <div class="meter" style="bottom:240px; right:60px;">
+    <svg viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="45" stroke="#033" fill="none"/>
+      <circle class="fg" cx="50" cy="50" r="45"/>
+    </svg>
+  </div>
+</div>
+
+<!-- ===== 操作 ===== -->
+<div class="panel">
+  <button id="fireBtn">FIRE</button>
+  <button id="startBtn">START</button>
+
+  <div class="controls">
+    <button id="leftBtn"  class="control-btn">◀</button>
+    <button id="rightBtn" class="control-btn">▶</button>
+  </div>
+</div>
+
+<script>
+const channel = new BroadcastChannel('game-control-channel');
+
+const leftBtn  = document.getElementById('leftBtn');
+const rightBtn = document.getElementById('rightBtn');
+const fireBtn  = document.getElementById('fireBtn');
+const startBtn = document.getElementById('startBtn');
+const hud      = document.getElementById('hud');
+const grid     = document.getElementById('grid');
+
+/* 移動 */
+let left = false;
+let right = false;
+
+function updateMove() {
+  let x = 0;
+  if (left && !right) x = -1;
+  if (right && !left) x = 1;
+
+  grid.style.transform =
+    `perspective(600px) rotateX(60deg) rotateZ(${x * 10}deg)`;
+
+  channel.postMessage({ type: 'move', x });
+}
+
+leftBtn.onpointerdown = () => { left = true; updateMove(); };
+rightBtn.onpointerdown = () => { right = true; updateMove(); };
+window.onpointerup = () => { left = right = false; updateMove(); };
+
+/* FIRE */
+let fireTimer = null;
+fireBtn.onpointerdown = () => {
+  hud.classList.add('firing');
+  channel.postMessage({ type: 'fire' });
+  fireTimer = setInterval(() => channel.postMessage({ type: 'fire' }), 120);
+};
+fireBtn.onpointerup = () => {
+  clearInterval(fireTimer);
+  hud.classList.remove('firing');
+};
+
+/* START（フェードアウト） */
+startBtn.onclick = () => {
+  channel.postMessage({ type: 'start' });
+
+  startBtn.classList.add('fade-out');
+  setTimeout(() => {
+    startBtn.style.display = 'none';
+  }, 600);
+};
+
+/* メーター自動アニメ */
+document.querySelectorAll('.meter .fg').forEach((fg, i) => {
+  const CIRC = 283;
+  let t = Math.random() * 1000;
+
+  setInterval(() => {
+    t += 0.05;
+    const v = 0.5 + Math.sin(t) * 0.35;
+    fg.style.strokeDashoffset = CIRC * (1 - v);
+  }, 100 + i * 40);
+});
+</script>
+
+</body>
+</html>
