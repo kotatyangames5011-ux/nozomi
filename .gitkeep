@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>3D Shooting 完全版 + 強化DevMode</title>
+<style>
+html,body{height:100%;}
+body { margin: 0; overflow: hidden; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif; background:#ffffff; color:#000; }
+#score, #bestTime { position:absolute; top:10px; font-size:20px; display:none; padding:6px 10px; background:rgba(255,255,255,0.8); border-radius:6px; }
+#score { left:10px; }
+#bestTime { right:15px; }
+#message { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:36px; text-align:center; display:none; background:rgba(255,255,255,0.85); padding:20px; border-radius:10px; }
+#bossHpBar { position:absolute; top:40px; left:50%; transform:translateX(-50%); width:400px; height:20px; background:#555; display:none; border-radius:10px; overflow:hidden; }
+#bossHp { height:100%; background:red; width:100%; transition:width 0.2s linear; }
+#titleScreen { position:absolute; top:40%; left:50%; transform:translate(-50%,-50%); text-align:center; display:block; color:black; animation: floatTitle 3s ease-in-out infinite; }
+#titleMain { font-size:64px; font-weight:bold; }
+#titleSub { font-size:24px; margin-top:12px; animation: blink 1s infinite; }
+#endScreen { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; display:none; color:black; }
+#endTitle { font-size:56px; margin-bottom:12px; }
+#endSub { font-size:20px; }
+#fadeScreen { position:fixed; top:0; left:0; width:100%; height:100%; background:black; opacity:0; pointer-events:none; transition: opacity 1s ease; z-index:50; }
+
+/* DevMode: 強化 UI */
+#devToggleHint { position:absolute; bottom:12px; right:12px; font-size:13px; color:#333; background:rgba(255,255,255,0.8); padding:6px 10px; border-radius:8px; }
+#devWindow {
+  position:fixed; right:20px; bottom:20px; width:420px; max-width:95vw; height:360px; background:rgba(18,18,20,0.96); color:#e6eef8; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,0.4); display:none; z-index:200; overflow:hidden; user-select:none;
+}
+#devHeader { padding:10px 12px; background:linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)); cursor:grab; display:flex; align-items:center; justify-content:space-between; }
+#devTitle { font-weight:600; font-size:14px; }
+#devControls { display:flex; gap:8px; align-items:center; }
+.devBtn { background:transparent; border:1px solid rgba(255,255,255,0.08); color:#e6eef8; padding:6px 8px; border-radius:6px; font-size:13px; cursor:pointer; }
+#devBody { padding:10px; height:calc(100% - 46px); display:flex; gap:8px; }
+#devLeft { width:60%; display:flex; flex-direction:column; }
+#devRight { width:40%; display:flex; flex-direction:column; }
+#devInput { width:100%; padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.03); color:#fff; font-size:13px; outline:none; }
+#suggestions { margin-top:6px; max-height:90px; overflow:auto; border-radius:6px; }
+.suggItem { padding:6px 8px; font-size:13px; cursor:pointer; border-radius:6px; }
+.suggItem:hover{ background:rgba(255,255,255,0.04); }
+#devLogArea { margin-top:8px; background:rgba(255,255,255,0.02); border-radius:6px; padding:8px; flex:1; overflow:auto; font-size:13px; }
+.logLine{ margin-bottom:6px; font-size:12.5px; }
+#devHistory { flex:1; background:rgba(255,255,255,0.02); border-radius:6px; padding:8px; overflow:auto; font-size:13px; }
+.historyLine { padding:6px 8px; border-radius:6px; margin-bottom:6px; background:rgba(0,0,0,0.2); cursor:pointer; }
+.historyLine:hover{ background:rgba(255,255,255,0.03); }
+#devFooter { padding:8px; display:flex; gap:8px; align-items:center; }
+#devFooter .smallBtn { background:transparent; border:1px solid rgba(255,255,255,0.06); color:#e6eef8; padding:6px 8px; border-radius:6px; cursor:pointer; font-size:13px; }
+
+@keyframes floatTitle { 0% { transform:translate(-50%,-50%) translateY(0px);} 50% { transform:translate(-50%,-50%) translateY(-15px);} 100% { transform:translate(-50%,-50%) translateY(0px);} }
+@keyframes blink { 0%{opacity:1;} 50%{opacity:0;} 100%{opacity:1;} }
+
+/* small responsive tweaks */
+@media (max-width:600px){ #devWindow{ right:6px; left:6px; width:auto; bottom:6px; height:46vh;} #titleMain{font-size:44px;} }
+</style>
+</head>
+<body>
+
+<div id="titleScreen">
+    <div id="titleMain">Space Adventure</div>
+    <div id="titleSub">PRESS SPACE TO START</div>
+</div>
+
+<div id="score">Score: 0</div>
+<div id="bestTime">Best: --</div>
+<div id="bossHpBar"><div id="bossHp"></div></div>
+<div id="message"></div>
+
+<div id="endScreen">
+    <div id="endTitle"></div>
+    <div id="endSub">Press SPACE to retry</div>
+</div>
+
+<div id="fadeScreen"></div>
+<div id="devToggleHint">Developer: press 0 or Ctrl+D</div>
+
+<!-- Dev Window -->
+<div id="devWindow" role="dialog" aria-label="Developer Console">
+  <div id="devHeader">
+    <div id="devTitle">DevMode — Space Adventure</div>
+    <div id="devControls">
+      <button id="devPin" class="devBtn" title="Pin/Unpin">📌</button>
+      <button id="devClose" class="devBtn" title="Close">✕</button>
+    </div>
+  </div>
+  <div id="devBody">
+    <div id="devLeft">
+      <input id="devInput" type="text" placeholder="Enter command (type 'help')" autocomplete="off" />
+      <div id="suggestions"></div>
+      <div id="devLogArea" aria-live="polite"></div>
+      <div id="devFooter">
+        <button class="smallBtn" id="btnClearLog">Clear Log</button>
+        <button class="smallBtn" id="btnExportState">Export State</button>
+        <button class="smallBtn" id="btnImportState">Import State</button>
+        <input id="importFile" type="file" accept="application/json" style="display:none;" />
+      </div>
+    </div>
+    <div id="devRight">
+      <div style="font-size:13px; margin-bottom:6px;">History</div>
+      <div id="devHistory"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+<script>
+// --------------------
+// Game core (元コードを拡張)
+// --------------------
+let scene, camera, renderer;
+let player;
+let keys = {left:false, right:false, space:false};
+let clock = new THREE.Clock();
+let score = 0;
+let gameOver = false;
+let gameStarted = false;
+let startTime = 0;
+let clearTime = 0;
+let bestTime = localStorage.getItem("bestTime") || null;
+
+let enemies = [];
+let bullets = [];
+let blackHoles = [];
+let boss = null;
+let bossActive = false;
+let bossHP = 20;
+let bossSecondForm = false;
+let bossHoming = [];
+let lastHomingTime = 0;
+let stageTiles = [];
+let stars = [];
+let particles = [];
+let engineParticles = [];
+let bossSpawning = false;
+let bossLaser = null;
+let bossCharging = false;
+let showFPS = false;
+let fpsEl = null;
+
+if(bestTime){ document.addEventListener('DOMContentLoaded',()=>{ document.getElementById('bestTime').innerText = "Best: " + bestTime + "s"; }); }
+
+init();
+// ゲーム側
+const channel = new BroadcastChannel('game-control-channel');
+
+channel.addEventListener('message', e => {
+    const data = e.data;
+
+    // 左右移動
+    if (data.type === 'move') {
+        const value = data.x; // -1〜1
+
+        keys.left  = value < -0.1;
+        keys.right = value > 0.1;
+    }
+
+    // 発射
+    if (data.type === 'fire') {
+        keys.space = true;
+        setTimeout(() => keys.space = false, 50);
+    }
+});
+
+
+animate();
+
+function init(){
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff);
+
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.z = 5; camera.position.y = 1;
+
+    renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    let light = new THREE.PointLight(0xffffff, 1, 100);
+    light.position.set(10,10,10);
+    scene.add(light);
+
+    let playerGeo = new THREE.CylinderGeometry(0.4,0.4,1.2,6);
+    let playerMat = new THREE.MeshStandardMaterial({color:0x00aaff, emissive:0x0066ff, emissiveIntensity:0.8});
+    player = new THREE.Mesh(playerGeo, playerMat);
+    player.rotation.x = Math.PI/2; player.position.set(0,0,0);
+    player.invincible = false; player.dps = false; player.fastFire = false; player.noclip = false;
+    scene.add(player);
+
+    createEnemies(); createBlackHoles(); createStageTiles(); createStars();
+
+    window.addEventListener('resize', onWindowResize);
+    document.addEventListener('keydown', keyDown);
+    document.addEventListener('keyup', keyUp);
+}
+
+function keyDown(e){
+    if(e.code==="ArrowLeft") keys.left=true;
+    if(e.code==="ArrowRight") keys.right=true;
+    if(e.code==="Space"){
+        keys.space=true;
+        if(!gameStarted && !gameOver){ startGame(); }
+        if(gameOver){ location.reload(); }
+    }
+}
+function keyUp(e){
+    if(e.code==="ArrowLeft") keys.left=false;
+    if(e.code==="ArrowRight") keys.right=false;
+    if(e.code==="Space") keys.space=false;
+}
+
+function startGame(){ gameStarted=true; document.getElementById('titleScreen').style.display='none'; document.getElementById('score').style.display='block'; document.getElementById('bestTime').style.display='block'; startTime = performance.now(); }
+function onWindowResize(){ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+
+function createStageTiles(){ for(let i=0;i<20;i++){ let geo=new THREE.BoxGeometry(10,1,5); let mat=new THREE.MeshBasicMaterial({color:0x999999, wireframe:true}); let tile=new THREE.Mesh(geo,mat); tile.position.z=-i*5; tile.position.y=-0.75; scene.add(tile); stageTiles.push(tile);} }
+function createStars(){ for(let i=0;i<200;i++){ let geo=new THREE.SphereGeometry(0.05,6,6); let mat=new THREE.MeshBasicMaterial({color:0x00ffff}); let star=new THREE.Mesh(geo,mat); star.position.set((Math.random()-0.5)*10,(Math.random()-0.5)*5,-Math.random()*100); scene.add(star); stars.push(star);} }
+
+function createEnemies(){ for(let i=0;i<10;i++) addRandomEnemy(); }
+function addRandomEnemy(typeOverride){ let type = (typeof typeOverride!=='undefined')?typeOverride:(Math.random()*3|0); let enemy; if(type===0){ enemy=new THREE.Mesh(new THREE.ConeGeometry(0.5,1.2,3), new THREE.MeshStandardMaterial({color:0xff3333, emissive:0xdd0000, emissiveIntensity:0.8})); enemy.rotation.x=-Math.PI/2; }
+ else if(type===1){ enemy=new THREE.Mesh(new THREE.DodecahedronGeometry(0.5), new THREE.MeshStandardMaterial({color:0xff8800, emissive:0xff5500, emissiveIntensity:0.7})); }
+ else { enemy=new THREE.Mesh(new THREE.ConeGeometry(0.3,1.5,3), new THREE.MeshStandardMaterial({color:0x8800ff, emissive:0x6600ff, emissiveIntensity:0.9})); enemy.userData.speed=7; enemy.rotation.x=-Math.PI/2; }
+ enemy.position.set((Math.random()-0.5)*6,0,-Math.random()*50 - 10); scene.add(enemy); enemies.push(enemy);
+}
+
+function createBlackHoles(){ for(let i=0;i<1;i++){ let geo=new THREE.SphereGeometry(1,32,32); let mat=new THREE.MeshStandardMaterial({color:0x808080, emissive:0x808080, emissiveIntensity:0.5, transparent:true, opacity:0.6}); let bh=new THREE.Mesh(geo,mat); bh.position.set((Math.random()-0.5)*6,0,-Math.random()*120-40); scene.add(bh); blackHoles.push(bh);} }
+
+function shootBullet(){ let geo=new THREE.CylinderGeometry(0.07,0.07,0.6,8); let mat=new THREE.MeshBasicMaterial({color:0x0000ff}); let bullet=new THREE.Mesh(geo,mat); bullet.rotation.x=Math.PI/2; bullet.position.copy(player.position); bullet.position.z -= 1; scene.add(bullet); bullets.push(bullet); }
+
+function createHitEffect(pos){ for(let i=0;i<15;i++){ let p=new THREE.Mesh(new THREE.SphereGeometry(0.06,6,6), new THREE.MeshBasicMaterial({color:0xffcc00})); p.position.copy(pos); p.velocity=new THREE.Vector3((Math.random()-0.5)*2,(Math.random()-0.5)*2,(Math.random()-0.5)*2); p.life=0.6; scene.add(p); particles.push(p); } }
+function createEngineParticles(){ let p=new THREE.Mesh(new THREE.SphereGeometry(0.07,6,6), new THREE.MeshBasicMaterial({color:0x00bfff})); p.position.copy(player.position); p.position.z += 0.6; p.velocity=new THREE.Vector3((Math.random()-0.5)*0.2,(Math.random()-0.5)*0.2,1 + Math.random()*0.5); p.life=0.3; scene.add(p); engineParticles.push(p); }
+
+function createBoss(){ enemies.forEach(e=>scene.remove(e)); enemies=[]; bossSpawning=true; fadeInCutscene(()=>{ document.getElementById('bossHpBar').style.display='block'; boss=new THREE.Mesh(new THREE.SphereGeometry(2,32,32), new THREE.MeshStandardMaterial({color:0xff0000, emissive:0x000080, emissiveIntensity:0.8})); boss.position.set(0,0,-60); scene.add(boss); bossActive=true; bossHP=20; bossSecondForm=false; lastHomingTime=clock.elapsedTime; fadeOutCutscene(); }); }
+
+function fadeInCutscene(callback){ let fade=document.getElementById("fadeScreen"); fade.style.opacity=1; setTimeout(()=>callback(),1000); }
+function fadeOutCutscene(){ setTimeout(()=>{ document.getElementById("fadeScreen").style.opacity=0; },1000); }
+
+function transformBossSecondForm(){ if(!boss) return; boss.geometry = new THREE.IcosahedronGeometry(2.5,0); boss.material.color.setHex(0xff0000); boss.material.emissive.setHex(0xaa0000); boss.material.emissiveIntensity = 1.2; bossHP = 17; bossSecondForm = true; document.getElementById('bossHp').style.width = "100%"; startBossChargeLaser(); }
+
+function startBossChargeLaser(){ if(!boss) return; bossCharging=true; let blink=setInterval(()=>{ if(!bossCharging){ clearInterval(blink); return; } boss.visible=!boss.visible; },150); setTimeout(()=>{ bossCharging=false; boss.visible=true; fireBossLaser(); },3000); }
+
+function fireBossLaser(){ if(!boss) return; let geo=new THREE.BoxGeometry(4,10,200); let mat=new THREE.MeshBasicMaterial({color:0xff0000, opacity:0.8, transparent:true}); bossLaser=new THREE.Mesh(geo,mat); bossLaser.position.set(0,0,boss.position.z + 20); scene.add(bossLaser); setTimeout(()=>{ if(player.position.distanceTo(bossLaser.position) < 6 && !player.invincible){ showEndScreen("GAME OVER"); } scene.remove(bossLaser); bossLaser=null; },600); }
+
+function createBossHoming(speed=8){ let laser=new THREE.Mesh(new THREE.SphereGeometry(0.25,16,16), new THREE.MeshBasicMaterial({color:0xff5500})); laser.position.copy(boss.position); laser.velocity=new THREE.Vector3().subVectors(player.position, boss.position).normalize().multiplyScalar(speed); scene.add(laser); bossHoming.push(laser); }
+
+function killBoss(){ bossActive=false; scene.remove(boss); document.getElementById('bossHpBar').style.display='none'; clearGame(); }
+
+function clearGame(){ clearTime = ((performance.now() - startTime)/1000).toFixed(2); if(!bestTime || clearTime < bestTime){ bestTime = clearTime; localStorage.setItem("bestTime", bestTime); } document.getElementById("bestTime").innerText = "Best: " + bestTime + "s"; showEndScreen("GAME CLEAR (" + clearTime + "s)"); }
+
+function showEndScreen(text){ if(gameOver) return; gameOver=true; document.getElementById('endTitle').innerText=text; document.getElementById('endScreen').style.display='block'; }
+
+function animate(){ requestAnimationFrame(animate); if(!gameStarted || gameOver){ renderer.render(scene,camera); return; }
+    let delta = clock.getDelta();
+    if(keys.left) player.position.x -= 5*delta; if(keys.right) player.position.x += 5*delta; player.position.x = Math.max(-4, Math.min(4, player.position.x));
+
+    let fireRate = player.fastFire ? 0.1 : 0.3;
+    if(keys.space && clock.elapsedTime - (player.lastShot||0) > fireRate){ shootBullet(); player.lastShot = clock.elapsedTime; }
+
+    createEngineParticles();
+
+    stageTiles.forEach(t=>{ t.position.z += 10*delta; if(t.position.z>5) t.position.z -= stageTiles.length*5; });
+    stars.forEach(s=>{ s.position.z += 10*delta; if(s.position.z>5) s.position.z=-100; });
+
+    if(!bossActive){
+        enemies.forEach((enemy,index)=>{
+            let sp = enemy.userData.speed || 5;
+            enemy.position.z += sp*delta;
+            if(!player.invincible && !player.noclip && enemy.position.distanceTo(player.position)<0.6) showEndScreen("GAME OVER");
+            bullets.forEach((bullet,bIndex)=>{
+                if(bullet.position.distanceTo(enemy.position)<0.5){ score++; if(player.dps) score+=2; document.getElementById('score').innerText = "Score: "+score; createHitEffect(enemy.position); scene.remove(enemy); enemies.splice(index,1); scene.remove(bullet); bullets.splice(bIndex,1); addRandomEnemy(); }
+            });
+            if(enemy.position.z>5){ enemy.position.z=-50; enemy.position.x=(Math.random()-0.5)*6; }
+        });
+    }
+
+    blackHoles.forEach(bh=>{
+        bh.position.z += 3*delta; let dir = new THREE.Vector3().subVectors(bh.position, player.position); let dist = dir.length(); if(dist<3){ dir.normalize(); player.position.add(dir.multiplyScalar(3*delta)); } if(dist<1 && !player.invincible && !player.noclip) showEndScreen("GAME OVER"); if(bh.position.z>5){ bh.position.z=-120-Math.random()*40; bh.position.x=(Math.random()-0.5)*6; }
+    });
+
+    bullets.forEach((b,i)=>{ b.position.z -= 12*delta; if(b.position.z<-100){ scene.remove(b); bullets.splice(i,1); } });
+
+    engineParticles.forEach((p,i)=>{ p.position.add(p.velocity.clone().multiplyScalar(delta*5)); p.life-=delta; if(p.life<=0){ scene.remove(p); engineParticles.splice(i,1);} });
+    particles.forEach((p,i)=>{ p.position.add(p.velocity.clone().multiplyScalar(delta*5)); p.life-=delta; if(p.life<=0){ scene.remove(p); particles.splice(i,1);} });
+
+    if(score>=20 && !bossActive && !bossSpawning){ bossSpawning=true; createBoss(); }
+
+    if(bossActive){ boss.position.z += 2*delta; if(bossSecondForm){ boss.position.x += Math.sin(clock.elapsedTime*5)*delta*6; } if(!player.invincible && !player.noclip && boss.position.distanceTo(player.position)<1.5) showEndScreen("GAME OVER"); bullets.forEach((bullet,bIndex)=>{ if(bullet.position.distanceTo(boss.position)<2){ bossHP--; document.getElementById('bossHp').style.width = (bossHP/(bossSecondForm?15:20)*100) + "%"; createHitEffect(boss.position); scene.remove(bullet); bullets.splice(bIndex,1); if(!bossSecondForm && bossHP<=0) transformBossSecondForm(); if(bossSecondForm && bossHP<=0) killBoss(); } }); if(!bossCharging){ if(clock.elapsedTime - lastHomingTime > (bossSecondForm?0.3:1.2)){ createBossHoming(bossSecondForm?15:8); lastHomingTime = clock.elapsedTime; } } }
+
+    bossHoming.forEach((l,i)=>{ l.position.add(l.velocity.clone().multiplyScalar(delta)); if(!player.invincible && !player.noclip && l.position.distanceTo(player.position)<0.5) showEndScreen("GAME OVER"); if(l.position.z>5 || l.position.z<-100){ scene.remove(l); bossHoming.splice(i,1); } });
+
+    renderer.render(scene,camera);
+    if(showFPS) updateFPS();
+}
+
+// --------------------
+// Enhanced DevMode (専用ウィンドウ / 履歴 / 補完 / 拡張コマンド)
+// --------------------
+const DEV_PASSWORD = "9aspaceadventure"; // 保守的にこのまま
+let devMode = false;
+let devWindow = document.getElementById('devWindow');
+let devInput = document.getElementById('devInput');
+let devLogArea = document.getElementById('devLogArea');
+let devHistoryEl = document.getElementById('devHistory');
+let suggestionsEl = document.getElementById('suggestions');
+let history = JSON.parse(localStorage.getItem('dev_history_v2')||'[]');
+let histIndex = history.length;
+let commands = [
+  'help','resett','addscore','enemy','boss','inv','dps','fire','setscore','teleport','spawn','spawnType','god','noclip','slowmo','timewarp','changebgcolor','showfps','dumpstate','exportstate','clearhistory','clearlog','showlog','spawnblackhole','setbest','resetbest'
+];
+
+// utilities
+function logDev(msg, level='info'){
+  const el = document.createElement('div'); el.className='logLine'; el.textContent = '['+new Date().toLocaleTimeString()+'] '+msg; devLogArea.prepend(el); }
+
+function saveHistory(){ localStorage.setItem('dev_history_v2', JSON.stringify(history.slice(-200))); }
+function pushHistory(cmd){ if(!cmd) return; history.push(cmd); if(history.length>200) history.shift(); histIndex = history.length; saveHistory(); renderHistory(); }
+function renderHistory(){ devHistoryEl.innerHTML=''; for(let i=history.length-1;i>=0;i--){ const h = document.createElement('div'); h.className='historyLine'; h.textContent = history[i]; h.onclick = ()=>{ devInput.value = history[i]; devInput.focus(); updateSuggestions(); }; devHistoryEl.appendChild(h);} }
+
+function updateSuggestions(){ const val = devInput.value.trim(); suggestionsEl.innerHTML=''; if(!val) return; const possible = commands.filter(c=>c.startsWith(val)).slice(0,20); possible.forEach(p=>{ const d=document.createElement('div'); d.className='suggItem'; d.textContent=p; d.onclick=()=>{ devInput.value = p; devInput.focus(); updateSuggestions(); }; suggestionsEl.appendChild(d); }); }
+
+devInput.addEventListener('input', updateSuggestions);
+devInput.addEventListener('keydown', (e)=>{
+  if(e.key==='Enter'){ const cmd = devInput.value.trim(); runDevCommand(cmd); pushHistory(cmd); devInput.value=''; suggestionsEl.innerHTML=''; e.preventDefault(); }
+  else if(e.key==='ArrowUp'){ if(history.length){ histIndex = Math.max(0, histIndex-1); devInput.value = history[histIndex]||''; updateSuggestions(); e.preventDefault(); }}
+  else if(e.key==='ArrowDown'){ if(history.length){ histIndex = Math.min(history.length, histIndex+1); devInput.value = history[histIndex]||''; updateSuggestions(); e.preventDefault(); }}
+});
+
+// open/close Dev Window
+function openDevMode(){ if(devMode) return; devMode=true; devWindow.style.display='block'; devInput.focus(); renderHistory(); logDev('Developer Mode Activated'); }
+function closeDevMode(){ devMode=false; devWindow.style.display='none'; }
+
+// password prompt and keyboard shortcuts
+document.addEventListener('keydown', (e)=>{
+  if(e.key === '0'){ const pass=prompt('Enter Dev Password'); if(pass===DEV_PASSWORD) openDevMode(); else alert('Wrong password'); }
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='d'){ e.preventDefault(); if(!devMode){ const pass=prompt('Enter Dev Password'); if(pass===DEV_PASSWORD) openDevMode(); else alert('Wrong password'); } else closeDevMode(); }
+});
+
+// dev window controls
+document.getElementById('devClose').addEventListener('click', ()=>{ closeDevMode(); });
+let pinned=false; document.getElementById('devPin').addEventListener('click', ()=>{ pinned=!pinned; document.getElementById('devPin').innerText = pinned? '📍':'📌'; });
+
+// drag
+let dragState = {dragging:false, ox:0, oy:0};
+const header = document.getElementById('devHeader'); header.addEventListener('pointerdown', (ev)=>{ if(ev.target.closest('#devControls')) return; dragState.dragging=true; dragState.ox = ev.clientX - devWindow.offsetLeft; dragState.oy = ev.clientY - devWindow.offsetTop; header.style.cursor='grabbing'; });
+window.addEventListener('pointermove', (ev)=>{ if(!dragState.dragging) return; devWindow.style.left = Math.max(6, ev.clientX - dragState.ox) + 'px'; devWindow.style.top = Math.max(6, ev.clientY - dragState.oy) + 'px'; devWindow.style.right='auto'; devWindow.style.bottom='auto'; });
+window.addEventListener('pointerup', ()=>{ dragState.dragging=false; header.style.cursor='grab'; });
+
+// suggestion click handled above
+
+// persistent log clear/export/import
+document.getElementById('btnClearLog').addEventListener('click', ()=>{ devLogArea.innerHTML=''; logDev('Log cleared'); });
+
+// import/export state
+const importFile = document.getElementById('importFile'); document.getElementById('btnExportState').addEventListener('click', ()=>{ const payload = dumpState(); const blob = new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='space_adventure_state.json'; a.click(); URL.revokeObjectURL(url); logDev('State exported'); });
+document.getElementById('btnImportState').addEventListener('click', ()=>{ importFile.click(); });
+importFile.addEventListener('change', (ev)=>{ const f=ev.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=(e)=>{ try{ const obj=JSON.parse(e.target.result); restoreState(obj); logDev('State imported'); }catch(err){ logDev('Import failed: '+err); } }; r.readAsText(f); });
+
+// Core extended commands
+function runDevCommand(raw){ if(!raw) return; const args = raw.split(/\s+/); const cmd = args[0].toLowerCase(); logDev('> ' + raw);
+  switch(cmd){
+    case 'help': logDev('Available commands: ' + commands.join(', ')); break;
+    case 'resett': localStorage.removeItem('bestTime'); bestTime=null; document.getElementById('bestTime').innerText='Best: --'; logDev('Best time cleared'); break;
+    case 'addscore': score += Number(args[1]||10); document.getElementById('score').innerText = 'Score: '+score; logDev('Score increased to '+score); break;
+    case 'setscore': score = Number(args[1]||0); document.getElementById('score').innerText = 'Score: '+score; logDev('Score set to '+score); break;
+    case 'enemy': addRandomEnemy(); logDev('Enemy spawned'); break;
+    case 'spawn': addRandomEnemy(Number(args[1]||0)); logDev('Spawned enemy type '+(args[1]||0)); break;
+    case 'spawnblackhole': createBlackHoles(); logDev('Black hole spawned'); break;
+    case 'boss': if(!bossActive) createBoss(); logDev('Boss summoned'); break;
+    case 'inv': player.invincible = !player.invincible; logDev('Invincible: '+player.invincible); break;
+    case 'dps': player.dps = !player.dps; logDev('DPS Boost: '+player.dps); break;
+    case 'fire': player.fastFire = !player.fastFire; logDev('Fire Rate Boost: '+player.fastFire); break;
+    case 'god': player.invincible=true; player.noclip=true; logDev('God mode ON'); break;
+    case 'noclip': player.noclip = !player.noclip; logDev('Noclip: '+player.noclip); break;
+    case 'slowmo': {
+        const f = Number(args[1]||0.5); clock.timeScale = f; logDev('Slowmo set to '+f+' (note: may be nonstandard)'); break; }
+    case 'timewarp': {
+        const add = Number(args[1]||1); startTime -= add*1000; logDev('Time warped by '+add+'s'); break; }
+    case 'teleport': { player.position.x = Number(args[1]||0); player.position.z = Number(args[2]||0); logDev('Teleported to '+player.position.x+','+player.position.z); break; }
+    case 'changebgcolor': { const c = args[1]||'#ffffff'; try{ scene.background = new THREE.Color(c); logDev('Background color changed to '+c); }catch(e){ logDev('Invalid color'); } break; }
+    case 'showfps': { showFPS = !showFPS; if(showFPS && !fpsEl){ fpsEl = document.createElement('div'); fpsEl.style.position='absolute'; fpsEl.style.left='10px'; fpsEl.style.bottom='10px'; fpsEl.style.padding='6px 8px'; fpsEl.style.background='rgba(0,0,0,0.6)'; fpsEl.style.color='#fff'; fpsEl.style.borderRadius='6px'; document.body.appendChild(fpsEl);} if(!showFPS && fpsEl){ fpsEl.remove(); fpsEl=null;} logDev('Show FPS: '+showFPS); break; }
+    case 'dumpstate': { const s = dumpState(); logDev('State: '+JSON.stringify(s)); break; }
+    case 'exportstate': { const payload = dumpState(); const blob = new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='state_export.json'; a.click(); URL.revokeObjectURL(url); logDev('State exported'); break; }
+    case 'importstate': { try{ const json = raw.slice(cmd.length).trim(); const obj = JSON.parse(json); restoreState(obj); logDev('Import applied'); }catch(e){ logDev('Import error: '+e); } break; }
+    case 'clearhistory': history=[]; saveHistory(); renderHistory(); logDev('History cleared'); break;
+    case 'clearlog': devLogArea.innerHTML=''; logDev('Log cleared'); break;
+    case 'setbest': { bestTime = String(args[1]||bestTime||'0'); localStorage.setItem('bestTime', bestTime); document.getElementById('bestTime').innerText='Best: '+bestTime+'s'; logDev('Best time set to '+bestTime); break; }
+    case 'resetbest': { bestTime=null; localStorage.removeItem('bestTime'); document.getElementById('bestTime').innerText='Best: --'; logDev('Best cleared'); break; }
+    default: logDev('Unknown command: '+cmd); break;
+  }
+}
+
+function dumpState(){ return {
+  score, bestTime, player:{x:player.position.x,y:player.position.y,z:player.position.z,invincible:player.invincible,dps:player.dps,fastFire:player.fastFire,noclip:player.noclip}, enemies:enemies.length, bullets:bullets.length, bossActive,bossHP, bossSecondForm, time:performance.now()
+}; }
+function restoreState(obj){ if(!obj) return; if(obj.score!==undefined) { score = Number(obj.score); document.getElementById('score').innerText='Score: '+score; } if(obj.bestTime!==undefined){ bestTime = obj.bestTime; localStorage.setItem('bestTime', bestTime); document.getElementById('bestTime').innerText='Best: '+bestTime+'s'; } if(obj.player){ player.position.x = obj.player.x||player.position.x; player.position.y = obj.player.y||player.position.y; player.position.z = obj.player.z||player.position.z; player.invincible = !!obj.player.invincible; player.dps = !!obj.player.dps; player.fastFire = !!obj.player.fastFire; player.noclip = !!obj.player.noclip; }
+}
+
+// initial render of history
+renderHistory();
+
+// small FPS helper
+let lastFrame = performance.now(); let frames=0; function updateFPS(){ frames++; const now = performance.now(); if(now - lastFrame >= 500){ const fps = Math.round(frames*1000/(now-lastFrame)); frames=0; lastFrame = now; if(fpsEl) fpsEl.textContent = 'FPS: '+fps; } }
+
+// expose a few helpers to global so dev console can call them from browser console
+window._dev = {openDevMode, runDevCommand, dumpState, restoreState, history};
+
+// make sure UI shows score initially
+document.getElementById('score').innerText = 'Score: '+score;
+
+// small accessibility: focus input when window opens
+devWindow.addEventListener('transitionend', ()=>{ if(devMode) devInput.focus(); });
+
+</script>
+</body>
+</html>
